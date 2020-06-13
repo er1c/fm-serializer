@@ -1,7 +1,20 @@
+Fork of [Frugal Mechanic Serializer](https://github.com/frugalmechanic/fm-serializer)
+---
+
+* Splits serializer codecs into separate importable projects with separate dependencies
+* TODO: Create a microsite with additional documentation
+* Minimize external dependencies
+* TODO: Scala 2.13 Support
+* TODO: Benchmarks
+* Scala.js 1.0 Support
+
+[![Build Status](https://travis-ci.org/er1c/scala-serializer.svg?branch=master)](https://travis-ci.org/er1c/scala-serializer)
+
+
+---
+
 Frugal Mechanic Serializer
 ==========================
-
-[![Build Status](https://travis-ci.org/frugalmechanic/fm-serializer.svg?branch=master)](https://travis-ci.org/frugalmechanic/fm-serializer)
 
 This is our Scala macro-based serialization library.
 
@@ -24,7 +37,7 @@ Usage
 
 **Modified Protocol Buffers**
 
-    import fm.serializer.protobuf.Protobuf
+    import serializer.protobuf.Protobuf
     case class Hello(name: String, list: List[Int])
     val hello = Hello("World", List(1,2,3,4,5))
     
@@ -35,7 +48,7 @@ Usage
 
 **JSON**
 
-    import fm.serializer.json.JSON
+    import serializer.json.JSON
     case class Hello(name: String, list: List[Int])
     val hello = Hello("World", List(1,2,3,4,5))
 
