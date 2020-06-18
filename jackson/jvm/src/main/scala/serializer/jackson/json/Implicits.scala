@@ -15,9 +15,7 @@
  */
 package serializer.jackson.json
 
-import java.io.{EOFException, InputStream}
 import java.math.{BigDecimal, BigInteger}
-import scala.annotation.tailrec
 
 /**
  * Experimental implicits with the goal of making it easier to build up Json Objects/Arrays
@@ -26,33 +24,6 @@ import scala.annotation.tailrec
  */
 object Implicits extends Implicits {
 
-  // Java8 => Java9 Implicit
-  implicit class RichInputStream(val is: InputStream) extends AnyVal {
-    def readNBytes(len: Int): Array[Byte] = {
-      if (len < 0) throw new IllegalArgumentException("len < 0")
-
-      val bytes = new Array[Byte](len)
-
-      @tailrec
-      def read(n: Int): Int = {
-        val rd = is.read(bytes, len - n, n)
-
-        if (rd == -1) len - n
-        else if (rd < n) read(n - rd)
-        else len
-      }
-
-      val actual: Int = read(len)
-
-      if (actual < len) throw new EOFException("Unexpected end of input stream: " +
-        "actual: %d, expected: %d" format(actual, len)
-      )
-
-      is.available() // triggers is.ensureOpen()
-
-      bytes
-    }
-  }
 }
 
 trait Implicits {

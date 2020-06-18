@@ -18,7 +18,6 @@ package serializer
 abstract class CollectionDeserializerBase[Col] extends Deserializer[Col] {
 
   final def deserializeRaw(input: RawInput): Col = input.readRawCollection(readCollectionFunction)
-
   final def deserializeNested(input: NestedInput): Col = input.readNestedCollection(readCollectionFunction)
 
   // A single static Function1 instance that avoid constantly re-creating Lambdas for the

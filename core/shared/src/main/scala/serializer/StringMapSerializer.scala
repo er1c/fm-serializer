@@ -20,20 +20,20 @@ package serializer
  * a JSON Object for a Map[String,V] instead of an Array[(String,V)].  If the underlying Output doesn't
  * support this style (e.g. Protobuf) then the TraversableOnceSerializer is used instead.
  */
-final class StringMapSerializer[@specialized V, Col <: TraversableOnce[(String,V)]](implicit elemSerializer: Serializer[(String,V)], valueSerializer: Serializer[V]) extends Serializer[Col] {
+final class StringMapSerializer[@specialized V, Col <: IterableOnce[(String,V)]](implicit elemSerializer: Serializer[(String,V)], valueSerializer: Serializer[V]) extends Serializer[Col] {
   // If the underlying output doesn't support a StringMap type of output (e.g. Protobuf) then we will use this TraversableOnceSerializer instead
-  private[this] val travOnceSerializer: TraversableOnceSerializer[(String,V), Col] = new TraversableOnceSerializer()
+  private[this] val itOnceSerializer: IterableOnceSerializer[(String,V), Col] = new IterableOnceSerializer()
   
   final def serializeRaw(output: RawOutput, col: Col): Unit = {
-    if (output.allowStringMap) output.writeRawObject(col){ serializeElems } else travOnceSerializer.serializeRaw(output, col)
+    if (output.allowStringMap) output.writeRawObject(col){ serializeElems } else itOnceSerializer.serializeRaw(output, col)
   }
   
   final def serializeNested(output: NestedOutput, col: Col): Unit = {
-    if (output.allowStringMap) output.writeNestedObject(col){ serializeElems } else travOnceSerializer.serializeNested(output, col)
+    if (output.allowStringMap) output.writeNestedObject(col){ serializeElems } else itOnceSerializer.serializeNested(output, col)
   }
   
   final def serializeField(output: FieldOutput, number: Int, name: String, col: Col): Unit = {
-    if (output.allowStringMap) output.writeFieldObject(number, name, col){ serializeElems } else travOnceSerializer.serializeField(output, number, name, col)
+    if (output.allowStringMap) output.writeFieldObject(number, name, col){ serializeElems } else itOnceSerializer.serializeField(output, number, name, col)
   }
   
   private[this] val serializeElems: Function2[FieldOutput, Col, Unit] = new Function2[FieldOutput, Col, Unit] {
@@ -64,7 +64,7 @@ final class StringMapSerializer[@specialized V, Col <: TraversableOnce[(String,V
     }
     
     private def serializeTraversableOnce(out: FieldOutput, col: Col): Unit = {
-      col.foreach{ case (name, value) => valueSerializer.serializeField(out, -1, name, value) }
+      col.iterator.foreach{ case (name, value) => valueSerializer.serializeField(out, -1, name, value) }
     }
   }
 }

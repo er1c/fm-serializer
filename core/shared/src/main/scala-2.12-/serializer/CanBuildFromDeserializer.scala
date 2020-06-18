@@ -18,19 +18,12 @@ package serializer
 import scala.collection.generic.CanBuildFrom
 import scala.collection.mutable.Builder
 
-object CanBuildFromDeserializer {
-  def forVector[Elem,Col](implicit elemDeser: Deserializer[Elem]): CanBuildFromDeserializer[Elem,Col] = {
-    val cbf: CanBuildFrom[_,Elem,Col] = Vector.canBuildFrom[Elem].asInstanceOf[CanBuildFrom[_,Elem,Col]]
-    new CanBuildFromDeserializer[Elem, Col]()(cbf, elemDeser)
-  }
-}
-
-final class CanBuildFromDeserializer[Elem,Col](implicit cbf: CanBuildFrom[_,Elem,Col], elemDeser: Deserializer[Elem]) extends CollectionDeserializerBase[Col] {
+final class CanBuildFromDeserializer[Elem,Col](implicit bf: CanBuildFrom[_,Elem,Col], elemDeser: Deserializer[Elem]) extends CollectionDeserializerBase[Col] {
   // TODO: make this a macro to use a Col.empty method (if one exists)
-  def defaultValue: Col = cbf().result
+  def defaultValue: Col = bf().result
 
   protected def readCollection(input: CollectionInput): Col = {
-    val builder: Builder[Elem,Col] = cbf()
+    val builder: Builder[Elem,Col] = bf()
     
     while (input.hasAnotherElement) {
       builder += elemDeser.deserializeNested(input)
@@ -38,5 +31,4 @@ final class CanBuildFromDeserializer[Elem,Col](implicit cbf: CanBuildFrom[_,Elem
     
     builder.result
   }
-  
 }

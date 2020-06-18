@@ -103,7 +103,7 @@ final class ProtobufInputStreamInput(is: InputStream, options: ProtobufOptions) 
    * Increments the current number of bytes read and checks to 
    * make sure we haven't exceeded the limit.
    */
-  private def incrementBytesRead(count: Int) {
+  private def incrementBytesRead(count: Int): Unit = {
     currentBytesRead += count
     if (currentBytesRead > currentBytesLimit) throw InvalidProtocolBufferException.sizeLimitExceeded()
   }
@@ -144,7 +144,7 @@ final class ProtobufInputStreamInput(is: InputStream, options: ProtobufOptions) 
    * @throws InvalidProtocolBufferException The end of the stream or the current
    *                                        limit was reached.
    */
-  def skipRawBytes(size: Int) {
+  def skipRawBytes(size: Int): Unit = {
     if (size < 0) throw InvalidProtocolBufferException.negativeSize()
     is.skip(size)
     incrementBytesRead(size)

@@ -23,33 +23,6 @@ object TestSerializerBase {
   private val RepeatFactor: Int = 1024
   private val LongRepeatFactor: Int = 8190
 
-  case class Foo (
-    string: String = "Hello World!",
-    int: Int = 1234,
-    long: Long = 12345678912345L,
-    float: Float = 3.14159f,
-    double: Double = 3.14159d,
-    bool: Boolean = true,
-    bigInteger: JavaBigInteger = new JavaBigInteger("123456789012345678901234567890"),
-    bigDecimal: JavaBigDecimal = new JavaBigDecimal("12345678901234.5678901234567890"),
-    intList: Seq[Int] = List(1,2,3,4,5,6,7,8,9,10),
-    stringList: Vector[String] = Vector("one", "two", "three", "four", ""),
-    emptyList: Seq[String] = Nil,
-    stringOpt: Option[String] = Some("Hello"),
-    stringOptNone: Option[String] = None,
-    listOpt: Option[List[Int]] = Some(List(1,2,3)),
-    listOptNone: Option[List[String]] = None,
-    tuple: (Int, String, Double) = (111, "222", 333.333),
-    map: Map[String,Int] = Map("foo" -> 1, "bar" -> 2),
-    bar: Bar = Bar(), //  Make  sure @Field number is synced up with MostlyEmptyFoo
-    barOpt: Option[Bar] = Some(Bar(next = Some(Bar("next", 321, Some(Bar()))))),
-    barList: List[Bar] = List(Bar("one", 1), Bar("two", 2, Some(Bar("nested", 999, Some(Bar("nest2", 111))))), Bar("three", 3)),
-    foo: Option[Foo] = Some(Foo(foo = None))
-    // Don't add more to this class (it already has 22 items) until we stop supporting Scala 2.10.x
-    // Don't add more to this class (it already has 22 items) until we stop supporting Scala 2.10.x
-    // Don't add more to this class (it already has 22 items) until we stop supporting Scala 2.10.x
-  )
-
   private def IntLengths: Vector[Int] = Vector(1,10,100,1000,10000,100000,1000000,10000000,100000000,1000000000)
   private def LongLengths: Vector[Long] = Vector(1L,10L,100L,1000L,10000L,100000L,1000000L,10000000L,100000000L,1000000000L,10000000000L,100000000000L,1000000000000L,10000000000000L,100000000000000L,1000000000000000L,10000000000000000L,100000000000000000L,1000000000000000000L)
 
@@ -79,16 +52,22 @@ object TestSerializerBase {
     multiByteLongString: String = "Hello \r\t\n \\ / \" \b\f oneByte: \u0024 twoByte: \u00A2 threeByte: \u20AC fourByteSupplementary: \uD83D\uDCA5  World!"*RepeatFactor,
     anothermultiByteLongString: String = "\u0024\u00A2\u20AC"*LongRepeatFactor,
     baz: Baz = Baz()
-    // Don't add more to this class (it already has 22 items) until we stop supporting Scala 2.10.x
-    // Don't add more to this class (it already has 22 items) until we stop supporting Scala 2.10.x
-    // Don't add more to this class (it already has 22 items) until we stop supporting Scala 2.10.x
   )
 
+  object Baz {
+    // Scala 2.13 work around for recursive children default value:
+    //  scala.collection.IndexedSeq[Baz] = Vector(Baz(children = Vector.empty), Baz(children = Vector.empty))
+    def apply(): Baz = {
+      val b: Baz = Baz(children = Vector.empty)
+      b.copy(children = Vector(Baz(children = Vector.empty), Baz(children = Vector.empty)))
+    }
+  }
+
   // Additional overflow since Foo & Bar have 22 items
-  case class Baz(
+  final case class Baz(
     // Should deserialize as a Vector
     iterable: Iterable[String] = List("one","two","three"),
-    children: scala.collection.IndexedSeq[Baz] = Vector(Baz(children = Vector.empty), Baz(children = Vector.empty)),
+    children: scala.collection.IndexedSeq[Baz],
     indexedSeq: IndexedSeq[String] = Vector("foo0","bar0","baz0"),
     scalaIndexedSeq: scala.IndexedSeq[String] = Vector("foo1","bar1","baz1"),
     collectionIndexedSeq: scala.collection.IndexedSeq[String] = Vector("foo2","bar2","baz2"),
@@ -99,6 +78,38 @@ object TestSerializerBase {
     char: Char = 'A',
     supplementaryCharacters: SupplementaryCharacters = SupplementaryCharacters(),
     bigIntegerAndDecimalTypes: BigIntegerAndDecimalTypes = BigIntegerAndDecimalTypes()
+  )
+
+  object Foo {
+    // Work around for Scala  2.13 that complains about nested foo: Option[Foo] = Some(Foo(foo = None))
+    def apply(): Foo = {
+      val f: Foo = Foo(foo = None)
+      f.copy(foo = Some(f))
+    }
+  }
+
+  final case class Foo (
+    string: String = "Hello World!",
+    int: Int = 1234,
+    long: Long = 12345678912345L,
+    float: Float = 3.14159f,
+    double: Double = 3.14159d,
+    bool: Boolean = true,
+    bigInteger: JavaBigInteger = new JavaBigInteger("123456789012345678901234567890"),
+    bigDecimal: JavaBigDecimal = new JavaBigDecimal("12345678901234.5678901234567890"),
+    intList: Seq[Int] = List(1,2,3,4,5,6,7,8,9,10),
+    stringList: Vector[String] = Vector("one", "two", "three", "four", ""),
+    emptyList: Seq[String] = Nil,
+    stringOpt: Option[String] = Some("Hello"),
+    stringOptNone: Option[String] = None,
+    listOpt: Option[List[Int]] = Some(List(1,2,3)),
+    listOptNone: Option[List[String]] = None,
+    tuple: (Int, String, Double) = (111, "222", 333.333),
+    map: Map[String,Int] = Map("foo" -> 1, "bar" -> 2),
+    bar: Bar = Bar(), //  Make  sure @Field number is synced up with MostlyEmptyFoo
+    barOpt: Option[Bar] = Some(Bar(next = Some(Bar("next", 321, Some(Bar()))))),
+    barList: List[Bar] = List(Bar("one", 1), Bar("two", 2, Some(Bar("nested", 999, Some(Bar("nest2", 111))))), Bar("three", 3)),
+    foo: Option[Foo] = None
   )
 
   // Supplementary Characters are represented in Java as 2 characters but need
@@ -334,7 +345,7 @@ trait TestSerializerBase[BYTES] extends FunSuite with Matchers with AppendedClue
     
     foo should equal (foo2)
   }
-  
+
   //===============================================================================================
   // Complex Object Testing
   //===============================================================================================
@@ -351,8 +362,7 @@ trait TestSerializerBase[BYTES] extends FunSuite with Matchers with AppendedClue
       foo2 should equal (foo)
     }
     
-    // Iterable doesn't have a CanBuildFrom so we default to using a Vector
-    require(foo2.bar.baz.iterable.isInstanceOf[Vector[String]])
+    require(foo2.bar.baz.iterable.nonEmpty)
   }
   
   test("Foo - Skipping unknown fields") {

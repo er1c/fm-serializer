@@ -17,7 +17,6 @@ package serializer
 
 import java.lang.{Iterable => JavaIterable}
 import java.util.{Collection => JavaCollection}
-import scala.collection.generic.{CanBuildFrom, Growable}
 import scala.reflect.macros._
 import scala.util.{Try => ScalaTry}
 
@@ -708,8 +707,8 @@ abstract class MacroHelpers(isDebug: Boolean) { self =>
     log(s"findCollectionSerializer($tpe)")
     
     Vector(
-      checkCollectionSerializer[T](tpe, typeOf[TraversableOnce[(String,_)]], typeOf[StringMapSerializer[_,_]], true),
-      checkCollectionSerializer[T](tpe, typeOf[TraversableOnce[_]], typeOf[TraversableOnceSerializer[_,_]], false),
+      checkCollectionSerializer[T](tpe, typeOf[IterableOnce[(String,_)]], typeOf[StringMapSerializer[_,_]], true),
+      checkCollectionSerializer[T](tpe, typeOf[IterableOnce[_]], typeOf[IterableOnceSerializer[_,_]], false),
       checkCollectionSerializer[T](tpe, typeOf[JavaIterable[_]], typeOf[JavaIterableSerializer[_,_]], false)
     ).flatten.headOption
   }
@@ -765,7 +764,7 @@ abstract class MacroHelpers(isDebug: Boolean) { self =>
     log(s"findCollectionDeserializer($tpe)")
 
     val elemTpeOpt: Option[Type] = 
-      getSingleTypeParamAsSeenFrom(tpe, typeOf[TraversableOnce[_]]) orElse
+      getSingleTypeParamAsSeenFrom(tpe, typeOf[IterableOnce[_]]) orElse
       getSingleTypeParamAsSeenFrom(tpe, typeOf[Growable[_]]) orElse
       getSingleTypeParamAsSeenFrom(tpe, typeOf[JavaIterable[_]]) orElse
       typeArgsFor(tpe).headOption
@@ -781,7 +780,34 @@ abstract class MacroHelpers(isDebug: Boolean) { self =>
         
     Option(tree).map{ ctx.Expr[Deserializer[T]](_) }
   }
-  
+
+  private val isScala213: Boolean = {
+    scala.tools.nsc.Properties.versionNumberString.split('.').map{ _.toInt }.toList match {
+      case List(major, minor, _) if major > 2 || major == 2 && minor > 12 => true
+      case _ => false
+    }
+  }
+
+  private lazy val CanBuildFromType: Type = {
+    require(!isScala213)
+    ctx.mirror.staticClass("scala.collection.generic.CanBuildFrom").toType
+  }
+
+  private lazy val IterableOpsType: Type = {
+    require(isScala213)
+    ctx.mirror.staticClass("scala.collection.IterableOps").toType
+  }
+
+  private lazy val MapOpsType: Type = {
+    require(isScala213)
+    ctx.mirror.staticClass("scala.collection.MapOps").toType
+  }
+
+  private def typeArg1(tpe: Type): Type = tpe.typeArgs.head.dealias
+  private def typeArg2(tpe: Type): Type = tpe.typeArgs(1).dealias
+  private lazy val tupleSymbols: Set[Symbol] = definitions.TupleClass.seq.toSet
+  private def isTuple(tpe: Type): Boolean = tupleSymbols.contains(tpe.typeSymbol)
+
   def makeNormalCollectionDeserializer(tpe: Type, elemTpe: Type): Tree = {
     val name: TermName = TermName(ctx.freshName("colDeserializer"))
     val proxyName: TermName = TermName(ctx.freshName("colDeserializerProxy"))
@@ -803,11 +829,17 @@ abstract class MacroHelpers(isDebug: Boolean) { self =>
         //println(s"DETECTED INDEXED_SEQ - $tpe - new serializer.VectorDeserializer[$elemTpe, $tpe]()")
         // Default to the VectorDeserializer for any other IndexedSeq type
         q"new serializer.VectorDeserializer[$elemTpe, $tpe]()"
-      } else if (hasImplicit(appliedType(typeOf[CanBuildFrom[_,_,_]], List(WildcardType, elemTpe, tpe)))) {
+      } else if (!isScala213 && hasImplicit(appliedType(CanBuildFromType, List(WildcardType, elemTpe, tpe)))) {
         //println(s"DETECTED CanBuildFrom - $tpe - new serializer.CanBuildFromDeserializer[$elemTpe, $tpe]()")
         q"new serializer.CanBuildFromDeserializer[$elemTpe, $tpe]()"
       } else if (tpe <:< typeOf[Growable[_]] && hasNoArgsConstructor(tpe)) {
         q"new serializer.GrowableDeserializer[$elemTpe, $tpe](new $tpe)"
+      } else if (isScala213 && isTuple(elemTpe) && tpe <:< appliedType(MapOpsType,  List(typeArg1(elemTpe), typeArg2(elemTpe), WildcardType, tpe))) {
+        val keyTpe: Type = typeArg1(elemTpe)
+        val valueTpe: Type = typeArg2(elemTpe)
+        q"new serializer.MapOpsDeserializer[$keyTpe, $valueTpe, $elemTpe, $tpe](${getCompanionSymbol(tpe)}.newBuilder[$keyTpe,$valueTpe])"
+      } else if (isScala213 && tpe <:< appliedType(IterableOpsType,  List(elemTpe, WildcardType, tpe))) {
+        q"new serializer.IterableOpsDeserializer[$elemTpe, $tpe](${getCompanionSymbol(tpe)}.newBuilder[$elemTpe])"
       } else if (tpe <:< typeOf[JavaCollection[_]]) {
         // TODO: make this more robust
         val newTpe: Tree = if (isTrait) q"new java.util.ArrayList[$elemTpe]()" else q"new $tpe"
@@ -835,12 +867,12 @@ abstract class MacroHelpers(isDebug: Boolean) { self =>
     val name: TermName = TermName(ctx.freshName("colDeserializer"))
     val proxyName: TermName = TermName(ctx.freshName("colDeserializerProxy"))
        
-    val tree: Tree = if (hasImplicit(appliedType(typeOf[CanBuildFrom[_,_,_]], List(WildcardType, elemTpe, tpe)))) {
+    val tree: Tree = if (!isScala213 && hasImplicit(appliedType(CanBuildFromType, List(WildcardType, elemTpe, tpe)))) {
       q"new serializer.StringMapCanBuildFromDeserializer[$valueTpe, $tpe]()"
     } else if (tpe <:< typeOf[Growable[_]] && hasNoArgsConstructor(tpe)) {
       q"new serializer.StringMapGrowableDeserializer[$valueTpe, $tpe](new $tpe)"
-    } else if (tpe <:< typeOf[Vector[_]]) {
-      q"serializer.StringMapCanBuildFromDeserializer.forVector[$valueTpe, $tpe]()"
+    } else if (isScala213 && tpe <:< appliedType(IterableOpsType,  List(elemTpe, WildcardType, tpe))) {
+      q"new serializer.StringMapOpsDeserializer[$valueTpe, $tpe](${getCompanionSymbol(tpe)}.newBuilder[String, $valueTpe])"
     } else if (tpe <:< typeOf[JavaCollection[_]]) {
       ???
       //val isTrait: Boolean = tpe.typeSymbol.asClass.isTrait
@@ -893,7 +925,7 @@ abstract class MacroHelpers(isDebug: Boolean) { self =>
     case "Boolean" => q"false"
     case "Byte"    => q"(0: Byte)"
     case "Short"   => q"(0: Short)"
-    case "Char"    => q"'\0'"
+    case "Char"    => q"'\u0000'"
     case "Int"     => q"0"
     case "Long"    => q"0L"
     case "Float"   => q"0F"
@@ -1006,9 +1038,12 @@ abstract class MacroHelpers(isDebug: Boolean) { self =>
     // We now support more than just case classes
     //if (!tpe.typeSymbol.asClass.isCaseClass) return Nil
     
-    val primary: MethodSymbol = tpe.decl(termNames.CONSTRUCTOR).asTerm.alternatives.collectFirst {
+    val primaryOpt: Option[MethodSymbol] = tpe.decl(termNames.CONSTRUCTOR).asTerm.alternatives.collectFirst {
       case ctor: MethodSymbol if ctor.isPrimaryConstructor => ctor
-    }.headOption.getOrElse{ return Nil }
+    }.headOption
+
+    if (primaryOpt.isEmpty) return Nil
+    val primary: MethodSymbol = primaryOpt.get
     
     // TODO: Handle multiple parameter lists
     require(primary.paramLists.size <= 1, "Don't currently support multiple parameter lists")
@@ -1276,16 +1311,33 @@ abstract class MacroHelpers(isDebug: Boolean) { self =>
    * Given a class find the companion object
    */
   def companionType(tpe: Type): Type = {
-
     tpe.typeSymbol.companion.asModule.moduleClass.asType.toType
   }
 
+  /*
+  private def companionSymbol(tpe: Type): Symbol = {
+    val comp = tpe.typeSymbol.companion
+    if (comp.isModule) comp
+    else {
+      // Borrowed from Magnolia: https://github.com/propensive/magnolia/blob/f21f2aabb49e43b372240e98ec77981662cc570c/core/shared/src/main/scala/magnolia.scala#L123-L155
+      val ownerChainOf: Symbol => Iterator[Symbol] =
+        s => Iterator.iterate(s)(_.owner).takeWhile(x => x != null && x != NoSymbol).toVector.reverseIterator
+      val path = ownerChainOf(tpe.typeSymbol)
+        .zipAll(ownerChainOf(ctx.internal.enclosingOwner), NoSymbol, NoSymbol)
+        .dropWhile { case (x, y) => x == y }
+        .takeWhile(_._1 != NoSymbol)
+        .map(_._1.name.toTermName)
+      if (path.isEmpty) ctx.abort(ctx.enclosingPosition, s"Cannot find a companion for $tpe")
+      else ctx.typecheck(path.foldLeft[Tree](Ident(path.next()))(Select(_, _)), silent = true).symbol
+    }
+  }*/
+
   private def getCompanionSymbol(tpe: Type): Symbol = {
-    // Borrowed and updated from  jsoniter-scala: https://github.com/plokhotnyuk/jsoniter-scala/blob/4afdad169093fff2d07599352d9932c1712bbaeb/jsoniter-scala-macros/shared/src/main/scala/com/github/plokhotnyuk/jsoniter_scala/macros/JsonCodecMaker.scala#L443
-    // Borrowed and refactored from Chimney: https://github.com/scalalandio/chimney/blob/master/chimney/src/main/scala/io/scalaland/chimney/internal/CompanionUtils.scala#L10-L63
-    // Copied from Magnolia: https://github.com/propensive/magnolia/blob/master/core/shared/src/main/scala/globalutil.scala
-    // From Shapeless: https://github.com/milessabin/shapeless/blob/master/core/src/main/scala/shapeless/generic.scala#L698
-    // Cut-n-pasted (with most original comments) and slightly adapted from https://github.com/scalamacros/paradise/blob/c14c634923313dd03f4f483be3d7782a9b56de0e/plugin/src/main/scala/org/scalamacros/paradise/typechecker/Namers.scala#L568-L613
+     // Borrowed and updated from  jsoniter-scala: https://github.com/plokhotnyuk/jsoniter-scala/blob/4afdad169093fff2d07599352d9932c1712bbaeb/jsoniter-scala-macros/shared/src/main/scala/com/github/plokhotnyuk/jsoniter_scala/macros/JsonCodecMaker.scala#L443
+     // Borrowed and refactored from Chimney: https://github.com/scalalandio/chimney/blob/master/chimney/src/main/scala/io/scalaland/chimney/internal/CompanionUtils.scala#L10-L63
+     // Copied from Magnolia: https://github.com/propensive/magnolia/blob/master/core/shared/src/main/scala/globalutil.scala
+     // From Shapeless: https://github.com/milessabin/shapeless/blob/master/core/src/main/scala/shapeless/generic.scala#L698
+     // Cut-n-pasted (with most original comments) and slightly adapted from https://github.com/scalamacros/paradise/blob/c14c634923313dd03f4f483be3d7782a9b56de0e/plugin/src/main/scala/org/scalamacros/paradise/typechecker/Namers.scala#L568-L613
     def patchedCompanionRef(tpe: Type): Tree = {
       val global = ctx.universe.asInstanceOf[scala.tools.nsc.Global]
       val globalType = tpe.asInstanceOf[global.Type]
@@ -1301,7 +1353,7 @@ abstract class MacroHelpers(isDebug: Boolean) { self =>
           // but we can't use it, because Scope.lookup returns wrong results when the lookup is ambiguous
           // and that triggers https://github.com/scalamacros/paradise/issues/64
           val s = callSiteContext.scope.lookupAll(name)
-            .filter(sym => (original.isTerm || sym.hasModuleFlag) && sym.isCoDefinedWith(original)).toList match {
+           .filter(sym => (original.isTerm || sym.hasModuleFlag) && sym.isCoDefinedWith(original)).toList match {
             case Nil => NoSymbol
             case unique :: Nil => unique
             case _ => global.abort(s"Unexpected multiple results for a companion symbol lookup for $original")
@@ -1317,6 +1369,10 @@ abstract class MacroHelpers(isDebug: Boolean) { self =>
     if (comp.isModuleClass) comp
     else patchedCompanionRef(tpe).symbol
   }
+
+  def scalaCollectionCompanion(tpe: Type): Tree =
+    if (tpe.typeSymbol.fullName.startsWith("scala.collection.")) Ident(tpe.typeSymbol.companion)
+    else ctx.abort(ctx.enclosingPosition, s"Unsupported type '$tpe'.")
 
   /**
    * Given a type and the name of a method return the tree that accesses that value

@@ -17,9 +17,10 @@ package serializer.jackson.json
 
 import com.fasterxml.jackson.core.json.JsonWriteContext
 import com.fasterxml.jackson.core.{Base64Variant, JsonGenerator, JsonStreamContext, ObjectCodec, SerializableString, TreeNode, Version}
-import java.io.InputStream
+import java.io.{EOFException, InputStream}
 import java.math.{BigDecimal, BigInteger}
 import java.nio.charset.StandardCharsets
+import scala.annotation.tailrec
 
 object JsonNodeGenerator {
   private case class JsonObjectBuilder(parent: JsonNodeBuilder, options: JsonOptions) extends JsonNodeBuilder {
@@ -63,6 +64,34 @@ object JsonNodeGenerator {
     def result: JsonNode
     def += (fieldName: String): Unit
     def += (node: JsonNode): Unit
+  }
+
+  // Java8 => Java9 Implicit
+  implicit class RichInputStream(val is: InputStream) extends AnyVal {
+    def readNBytes(len: Int): Array[Byte] = {
+      if (len < 0) throw new IllegalArgumentException("len < 0")
+
+      val bytes = new Array[Byte](len)
+
+      @tailrec
+      def read(n: Int): Int = {
+        val rd = is.read(bytes, len - n, n)
+
+        if (rd == -1) len - n
+        else if (rd < n) read(n - rd)
+        else len
+      }
+
+      val actual: Int = read(len)
+
+      if (actual < len) throw new EOFException("Unexpected end of input stream: " +
+        "actual: %d, expected: %d" format(actual, len)
+      )
+
+      is.available() // triggers is.ensureOpen()
+
+      bytes
+    }
   }
 }
 

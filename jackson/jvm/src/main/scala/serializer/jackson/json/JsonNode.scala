@@ -437,7 +437,7 @@ sealed abstract class JsonValue extends JsonNode {
   override protected def atImpl(ptr: JsonPointer): Option[JsonNode] = None
 }
 
-object JsonObject extends JsonNodeParseFactory[IndexedSeq[(String, JsonNode)], JsonObject] {
+object JsonObject extends JsonNodeParseFactory[IndexedSeq[(String, JsonNode)], JsonObject] with JsonObjectBase {
   def apply(members: (String, JsonNode)*): JsonObject = JsonObject(members.toIndexedSeq)
   def apply(members: Iterable[(String, JsonNode)]): JsonObject = JsonObject(members.toIndexedSeq)
 
@@ -455,8 +455,8 @@ object JsonObject extends JsonNodeParseFactory[IndexedSeq[(String, JsonNode)], J
       }
     }
 
-    if (idx == arr.length) JsonObject(arr)
-    else JsonObject(java.util.Arrays.copyOf(arr, idx))
+    if (idx == arr.length) JsonObject(unsafeWrapArray(arr))
+    else JsonObject(unsafeWrapArray(arr.slice(0, idx)))
   }
 
   val empty: JsonObject = JsonObject()
