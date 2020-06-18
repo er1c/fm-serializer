@@ -15,16 +15,19 @@
  */
 package serializer
 
-final class GrowableDeserializer[Elem,Col <: Growable[Elem]](newInstance: => Col)(implicit elemDeser: Deserializer[Elem]) extends CollectionDeserializerBase[Col] {
-  def defaultValue: Col = newInstance
+import scala.collection.mutable.Builder
+
+final class IterableOpsDeserializer[Elem,Col](newBuilder: => Builder[Elem, Col])(implicit elemDeser: Deserializer[Elem]) extends CollectionDeserializerBase[Col] {
+  // TODO: make this a macro to use a Col.empty method (if one exists)
+  def defaultValue: Col = newBuilder.result
 
   protected def readCollection(input: CollectionInput): Col = {
-    val col: Col = newInstance
-    
+    val builder: Builder[Elem, Col] = newBuilder
+
     while (input.hasAnotherElement) {
-      col += elemDeser.deserializeNested(input)
+      builder += elemDeser.deserializeNested(input)
     }
-    
-    col
+
+    builder.result
   }
 }

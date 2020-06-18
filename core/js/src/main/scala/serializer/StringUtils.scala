@@ -231,12 +231,13 @@ object StringUtils {
   // Original from java.lang.Long
   private  def stringSizeImpl(x: Long): Int = {
     var p: Long = 10L
+    var i: Int = 1
 
-    for (i: Int <- 1 until 19) {
-      if (x < p) return i
+    while (i < 19 && x < p) {
       p = 10L * p
+      i += 1
     }
 
-    19
+    i
   }
 }

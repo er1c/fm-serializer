@@ -1,10 +1,8 @@
 package serializer
 
-import scala.collection.JavaConverters._
-
 // JVM-specific common tests
 trait TestSerializer[BYTES] extends TestSerializerBase[BYTES] {
-
+  import JavaConverters._
   //===============================================================================================
   // Java Bean Container
   //===============================================================================================

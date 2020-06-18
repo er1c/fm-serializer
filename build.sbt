@@ -7,8 +7,8 @@ val JacksonVersion = "2.10.0"
 
 lazy val buildSettings = Seq(
   organization := "io.github.er1c",
-  scalaVersion := "2.12.11",
-  crossScalaVersions := Seq("2.11.12", scalaVersion.value), // , "2.13.2"),
+  scalaVersion := "2.13.2",
+  crossScalaVersions := Seq("2.11.12", "2.12.11", scalaVersion.value),
   // Need to make sure any Java sources are compiled to 1.8 classfile format
   javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
   // Needed for the JavaBean tests to work, IntelliJ imports this weird,
@@ -79,7 +79,7 @@ lazy val commonJvmSettings = Seq(
   parallelExecution in Test := false,
 )
 
-lazy val coreSettings = buildSettings ++ commonSettings ++ publishSettings ++ releaseSettings
+lazy val coreSettings = buildSettings ++ setCrossDirs(Test) ++ setCrossDirs(Compile) ++ commonSettings ++ publishSettings ++ releaseSettings
 
 // Root Project
 lazy val root = project.in(file("."))
@@ -250,3 +250,47 @@ credentials ++= (for {
   username <- Option(System.getenv().get("SONATYPE_USERNAME"))
   password <- Option(System.getenv().get("SONATYPE_PASSWORD"))
 } yield Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)).toSeq
+
+// Adds a `src/main/scala-2.13+` source directory for Scala 2.13 and newer
+// and a `src/main/scala-2.12-` source directory for Scala version older than 2.13
+// unmanagedSourceDirectories is "order sensitive" so override the default settings in the correct priority order
+def setCrossDirs(config: Configuration): Seq[Setting[_]] = {
+  Seq(
+    unmanagedSourceDirectories in config := {
+      val baseDir   = baseDirectory.value
+      //val platform  = crossProjectPlatform.value.identifier
+
+      val configPath: String = config match {
+        case Compile => "main"
+        case Test    => "test"
+        case _       => return Nil
+      }
+
+      val javaSources = Seq(
+        baseDir / ".."  / "shared" / "src" / configPath / "java",
+        baseDir / "src" / configPath / "java",
+      )
+
+      val scalaSources = (CrossVersion.partialVersion(scalaVersion.value) match {
+        case Some((2, n)) if n < 13 => Seq(
+          baseDir                    / "src" / configPath / "scala",       // for 2.x or 3.0
+          baseDir / ".."  / "shared" / "src" / configPath / "scala",
+          baseDir                    / "src" / configPath / "scala-2.12-", // for both 2.12 and 2.11
+          baseDir / ".."  / "shared" / "src" / configPath / "scala-2.12-",
+          baseDir                    / "src" / configPath / s"scala-2.$n", // explicit version (e.g. 2.11)
+          baseDir / ".."  / "shared" / "src" / configPath / s"scala-2.$n",
+        )
+        case Some((m, n))           => Seq(
+          baseDir                   / "src" / configPath / "scala",        // for 2.x or 3.0
+          baseDir / ".." / "shared" / "src" / configPath / "scala",
+          baseDir                   / "src" / configPath / "scala-2.13+",  // for 2.13 or above
+          baseDir / ".." / "shared" / "src" / configPath / "scala-2.13+",
+          baseDir                   / "src" / configPath / s"scala-$m.$n", // explicit version (e.g. 2.13)
+          baseDir / ".." / "shared" / "src" / configPath / s"scala-$m.$n",
+        )
+      })
+
+      javaSources ++ scalaSources
+    }
+  )
+}

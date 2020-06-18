@@ -16,9 +16,9 @@
 package serializer
 
 /**
- * A Serializer for a TraversableOnce
+ * A Serializer for a IterableOnce
  */
-final class TraversableOnceSerializer[@specialized T, Col <: TraversableOnce[T]](implicit elemSerializer: Serializer[T]) extends Serializer[Col] {
+final class IterableOnceSerializer[@specialized T, Col <: IterableOnce[T]](implicit elemSerializer: Serializer[T]) extends Serializer[Col] {
   final def serializeRaw(output: RawOutput, col: Col): Unit = output.writeRawCollection(col){ serializeElems }
   final def serializeNested(output: NestedOutput, col: Col): Unit = output.writeNestedCollection(col){ serializeElems }
   final def serializeField(output: FieldOutput, number: Int, name: String, col: Col): Unit = output.writeFieldCollection(number, name, col){ serializeElems }
@@ -47,7 +47,7 @@ final class TraversableOnceSerializer[@specialized T, Col <: TraversableOnce[T]]
     }
     
     private def serializeTraversableOnce(out: NestedOutput, col: Col): Unit = {
-      col.foreach{ elem: T => elemSerializer.serializeNested(out, elem) }
+      col.iterator.foreach{ elem: T => elemSerializer.serializeNested(out, elem) }
     }
   }
 }

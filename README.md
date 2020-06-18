@@ -1,22 +1,10 @@
-Fork of [Frugal Mechanic Serializer](https://github.com/frugalmechanic/fm-serializer)
----
+Scala Serializer
+================
 
-* Splits serializer codecs into separate importable projects with separate dependencies
-* TODO: Create a microsite with additional documentation
-* Minimize external dependencies
-* TODO: Scala 2.13 Support
-* TODO: Benchmarks
-* Scala.js 1.0 Support
-
-[![Build Status](https://travis-ci.org/er1c/scala-serializer.svg?branch=master)](https://travis-ci.org/er1c/scala-serializer)
+[![Build Status](https://travis-ci.org/er1c/scala-serializer.svg?branch=main)](https://travis-ci.org/er1c/scala-serializer)
 
 
----
-
-Frugal Mechanic Serializer
-==========================
-
-This is our Scala macro-based serialization library.
+Scala macros that generate serializers/deserializers for **case classes**, **POJOs**, **Scala Collections**, **Java Collections**, etc for multiple serializer/deserializer formats.
 
 Features
 --------
@@ -25,25 +13,52 @@ Features
 * Automatic generation of serializers/deserializers at compile time (via Scala Macros)
 * No Boilerplate
 * Support for **case classes**, **POJOs**, **Scala Collections**, **Java Collections**, etc...
+* Scala.js 1.0
+* Scala 2.11/2.12/2.13
+* Java 8/11/14
+* Write custom type Serializers/Deserializers
 
 Formats
 -------
 
-* Modified Protocol Buffers (TODO: Document the modifications)
-* JSON
+* Protocol Buffers
+* JSON (Scala implementation that supports `Array[Byte]` and Json `String`s)
+* Jackson Json (includes scala Jackson Json library for manipulating Jackson's JsonObject/JsonNode/etc)
+* BSON using MongoDB library
+* YAML (coming soon)
+
+## Acknowledgments
+
+Forked from [Frugal Mechanic Serializer](https://github.com/frugalmechanic/fm-serializer)
+
+Key changes:
+
+* Splits serializer codecs into separate importable projects with separate dependencies
+* Minimize external dependencies
+* Scala 2.13 Support
+* Scala.js 1.0 Support
 
 Usage
 -----
 
-**Modified Protocol Buffers**
+    val serializerVersion = "1.0.0-M1"
+    libraryDependencies ++= Seq(
+      "io.github.er1c" %% "scala-serializer-core" % serializerVersion,
+      "io.github.er1c" %% "scala-serializer-commontypes" % serializerVersion,
+      "io.github.er1c" %% "scala-serializer-json" % serializerVersion,
+      "io.github.er1c" %% "scala-serializer-jackson" % serializerVersion,
+      "io.github.er1c" %% "scala-serializer-bson" % serializerVersion,
+    )
+
+**Protocol Buffers**
 
     import serializer.protobuf.Protobuf
     case class Hello(name: String, list: List[Int])
     val hello = Hello("World", List(1,2,3,4,5))
-    
+
     val bytes: Array[Byte] = Protobuf.toBytes(hello)
     val hello2: Hello = Protobuf.fromBytes[Hello](bytes)
-    
+
     require(hello == hello2)
 
 **JSON**
@@ -57,17 +72,25 @@ Usage
 
     require(hello == hello2)
 
-More complex examples are in [TestSerializer.scala](https://github.com/frugalmechanic/fm-serializer/blob/master/src/test/scala/fm/serializer/TestSerializer.scala)
+**BSON**
 
-Authors
--------
+    import serializer.bson.BSON
+    case class Hello(name: String, list: List[Int])
+    val hello = Hello("World", List(1,2,3,4,5))
 
-Tim Underwood (<a href="https://github.com/tpunder" rel="author">GitHub</a>, <a href="https://www.linkedin.com/in/tpunder" rel="author">LinkedIn</a>, <a href="https://twitter.com/tpunder" rel="author">Twitter</a>, <a href="https://plus.google.com/+TimUnderwood0" rel="author">Google Plus</a>)
+    val bsonDoc: BsonDocument = BSON.toBsonDocument(hello)
+    val hello2: Hello = BSON.fromBsonDocument[Hello](bsonDoc)
 
-Copyright
----------
+    require(hello == hello2)
 
-Copyright [Frugal Mechanic](http://frugalmechanic.com)
+**Custom Serializer**
+
+    import java.util.Date
+    import serializer.{MappedSimpleSerializer, Primitive}
+    implicit val javaDate: MappedSimpleSerializer[Long,Date] = Primitive.long.map(_.getTime, new Date(_), null)
+
+More complex examples are in [TestSerializerBase.scala](https://github.com/er1c/scala-serializer/blob/main/core/shared/src/test/scala/serializer/TestSerializerBase.scala)
+
 
 License
 -------
